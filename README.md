@@ -44,8 +44,8 @@ Without correct marker placement, measurements will fail.
 ## System dependency
 
 ```bash
-git clone https://github.com/Fledermausmann-C3D2/REPO.git
-cd REPO
+git clone https://github.com/Fledermausmann-C3D2/Leaf_sice.git
+cd Leaf_Sice
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
