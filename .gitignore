@@ -1,0 +1,38 @@
+# =====================
+# Python
+# =====================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# =====================
+# Virtual Environment
+# =====================
+venv/
+.venv/
+
+# =====================
+# Build / Packaging
+# =====================
+build/
+dist/
+*.spec
+
+# =====================
+# Logs & Outputs (dein Projekt!)
+# =====================
+log.txt
+leaf_measurements.csv
+
+# =====================
+# IDE / Editor
+# =====================
+.vscode/
+.idea/
+
+# =====================
+# OS files
+# =====================
+.DS_Store
+Thumbs.db
