@@ -22,7 +22,8 @@ Maybe change it to:
 for not long leafs...
 
 
->[!Important: ArUco Marker Setup]
+>[!IMPORTANT]
+>ArUco Marker Setup
 >This software requires a **fixed reference setup**:
 
 >- 4 ArUco markers must be present in every image
