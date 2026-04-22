@@ -25,14 +25,14 @@ for not long leafs...
 >[!IMPORTANT]
 >ArUco Marker Setup
 >This software requires a **fixed reference setup**:
-
+>
 >- 4 ArUco markers must be present in every image
 >- Marker dictionary: `DICT_4X4_50`
 >- The markers define a physical reference area of:
 >60 cm (height) × 30 cm (width)
-
+>
 >The outer marker corners must match this real-world size.
-
+>
 >Without correct marker placement, measurements will fail.
 
 
