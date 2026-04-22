@@ -1,28 +1,41 @@
-# 🌿 Leaf Size Analysis (ArUco + OpenCV)
+# Leaf Size Analysis (ArUco + OpenCV)
 
 A Python-based tool for automated leaf measurement using image processing and ArUco markers.
 
-This project is designed for **Linux systems** and processes images to measure leaf dimensions and area based on a calibrated reference frame.
+This project is designed for processes images to measure leaf dimensions and area based on a calibrated reference frame.
 
----
+## Background
 
-# ⚠️ Important: ArUco Marker Setup
+At JKI we need to mesuare a lot of leafs by hand and it needs time.
+For this i write this program to autmize the work easyly with the right background.
 
-This software requires a **fixed reference setup**:
+>[!NOTE]
+>Its for long leafs like barley or similar 
 
-- 4 ArUco markers must be present in every image
-- Marker dictionary: `DICT_4X4_50`
-- The markers define a physical reference area of:
-60 cm (height) × 30 cm (width)
+You can change this at the Morphologie Point
+
+```kernel = np.ones((25,3), np.uint8)```
+
+Maybe change it to:
+
+```kernel = np.ones((10,5), np.uint8)```
+for not long leafs...
 
 
-👉 The outer marker corners must match this real-world size.
+>[!Important: ArUco Marker Setup]
+>This software requires a **fixed reference setup**:
 
-Without correct marker placement, measurements will fail.
+>- 4 ArUco markers must be present in every image
+>- Marker dictionary: `DICT_4X4_50`
+>- The markers define a physical reference area of:
+>60 cm (height) × 30 cm (width)
 
----
+>The outer marker corners must match this real-world size.
 
-# 📊 Features
+>Without correct marker placement, measurements will fail.
+
+
+## Features
 
 - Batch processing of image folders
 - Automatic ArUco marker detection
@@ -37,9 +50,9 @@ Without correct marker placement, measurements will fail.
 - Error logging system
 - GUI (ttkbootstrap)
 
----
 
-# 🐧 Requirements (Linux only)
+>[!NOTE]
+>This Programm is tested on Linux
 
 ## System dependency
 

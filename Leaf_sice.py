@@ -7,15 +7,15 @@ import ttkbootstrap as ttk
 from tkinter import filedialog
 
 
-#================== Feler loggen============
+#================== Error logging =============
 log_messages = []
 error_count = 0
 
-# ================= Reale Größe 4 Marker =================
+# ================= Real size of 4 markers =================
 REAL_WIDTH_CM = 30
 REAL_HEIGHT_CM = 60
 
-# ================= GUI FUNKTIONEN =================
+# ================= GUI FUNCTIONS =================
 
 def choose_folder():
     folder = filedialog.askdirectory()
@@ -63,17 +63,17 @@ def run_analysis():
     if not output_csv:
         output_csv = os.path.join(image_folder, "leaf_measurements.csv")
 
-    # ArUco Setup
+    # ArUco setup
     aruco = cv2.aruco
     aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
    
     parameters = aruco.DetectorParameters()
-    #ggf feinere erkennung der Marker -->
+    # optional: finer marker detection -->
 
     #parameters.adaptiveThreshWinSizeMin = 3
     #parameters.adaptiveThreshWinSizeMax = 23
     #parameters.adaptiveThreshWinSizeStep = 10
-    #parameters.adaptiveThreshConstant = 7 #(rauschen)
+    #parameters.adaptiveThreshConstant = 7 #(noise)
 
     image_paths = []
 
@@ -99,8 +99,6 @@ def run_analysis():
         corners, ids, rejected = detector.detectMarkers(gray)
 
         if ids is None or len(corners) < 4:
-            #print(file, "❌ Marker fehlen")
-
             msg = f"{file}: ❌ Marker missing"
 
             print(msg)
@@ -112,7 +110,7 @@ def run_analysis():
 
             continue
 
-        # alle Punkte sammeln
+        # collect all points
         pts_all = []
         for c in corners:
             for p in c[0]:
@@ -120,14 +118,13 @@ def run_analysis():
 
         pts_all = np.array(pts_all)
 
-        # äußere Form bestimmen
+        # determine outer shape
         hull = cv2.convexHull(pts_all)
 
         epsilon = 0.02 * cv2.arcLength(hull, True)
         approx = cv2.approxPolyDP(hull, epsilon, True)
 
         if len(approx) != 4:
-            #print(file, "❌ keine 4 Ecken")
             msg = f"{file}: ❌ no 4 corners"
 
             print(msg)
@@ -141,8 +138,8 @@ def run_analysis():
 
         rect = order_points(approx.reshape(4,2))
 
-        # Zielsystem
-        scale = 20 #skalierung der Flächenberechnung 10 - 30
+        # target coordinate system
+        scale = 20 # scaling factor for area calculation 10 - 30
         dst = np.array([
             [0,0],
             [REAL_WIDTH_CM*scale,0],
@@ -153,26 +150,24 @@ def run_analysis():
         M = cv2.getPerspectiveTransform(rect, dst)
         warped = cv2.warpPerspective(original, M, (int(REAL_WIDTH_CM*scale), int(REAL_HEIGHT_CM*scale)))
 
-        # ================= BLATT =================
+        # ================= LEAF =================
         hsv = cv2.cvtColor(warped, cv2.COLOR_BGR2HSV)
 
-        # Großer farbbereich auch für leicht gelbe blätter
-        # sonst 25,40,40 - 90,255,255
+        # wide color range including slightly yellow leaves
+        # otherwise 25,40,40 - 90,255,255
         lower_green = np.array([25,40,40])
         upper_green = np.array([90,255,255])
 
         mask = cv2.inRange(hsv, lower_green, upper_green)
 
-        # Morphologie einstellen (3,3)kleines blatt (7,7)großes
-        # 3,1 weil schmal
+        # adjust morphology (3,3) small leaf (7,7) large
+        # 3,1 because narrow
         kernel = np.ones((25,3), np.uint8)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         if not contours:
-            #print(file, "❌ kein Blatt")
-
             msg = f"{file}: ❌ NO Leaf"
 
             print(msg)
@@ -186,27 +181,27 @@ def run_analysis():
         leaf = max(contours, key=cv2.contourArea)
       
 
-        # ================= Maße =================
+        # ================= Measurements =================
         pixel_per_cm = scale
 
-        #bessert fehler, einkerbungen aus hull
+        # fixes errors / indentations using hull
         hull = cv2.convexHull(leaf)
         area_px = cv2.contourArea(hull)
 
         area_cm2 = area_px / (pixel_per_cm**2)
         
-        #misst anhand von fester achse============
+        # measure using fixed axis============
         #x,y,w,h = cv2.boundingRect(leaf)
 
         #width_cm = w / pixel_per_cm
         #height_cm = h / pixel_per_cm
 
-        #misst mit rotation, nach blatt===========
+        # measure with rotation, aligned to leaf===========
         rect = cv2.minAreaRect(leaf)
         (w, h) = rect[1]
         angle = rect[2]
 
-        # Normalisierung ============================
+        # normalization ============================
         if w < h:
             angle = angle + 90
 
@@ -220,25 +215,23 @@ def run_analysis():
         results.append([file, length_cm, width_cm, area_cm2, angle])
 
         progress["value"] = i + 1
-        #status_var.set(f"{i+1}/{total_images}")
         status_var.set(f"{i+1}/{total_images} | OK: {file}")
         root.update_idletasks()
 
-    # CSV speichern ==============================
+    # save CSV ==============================
     with open(output_csv,"w",newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["image","length_cm","width_cm","area_cm2","angle_deg"])
         writer.writerows(results)
 
-    # ================= LOG SPEICHERN =================
+    # ================= SAVE LOG =================
     with open("log.txt", "w") as f:
         for line in log_messages:
             f.write(line + "\n")
 
-    #status_var.set("Fertig")
     status_var.set(f"Ready | Mistakes: {error_count} | Total: {total_images}")
 
-# ================= GUI beschriftung =================
+# ================= GUI labeling =================
 
 root = ttk.Window(themename="solar")
 
@@ -249,7 +242,7 @@ folder_var = ttk.StringVar()
 output_var = ttk.StringVar()
 status_var = ttk.StringVar()
 
-# Erklärungstext
+# Description text
 description = """
 Leaf measurement using ArUco markers and OpenCV!
 
