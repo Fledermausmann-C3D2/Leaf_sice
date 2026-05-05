@@ -29,7 +29,10 @@ for not long leafs...
 >- 4 ArUco markers must be present in every image
 >- Marker dictionary: `DICT_4X4_50`
 >- The markers define a physical reference area of:
->60 cm (height) × 30 cm (width)
+> 52.4 cm (height) × 30 cm (width)
+> Change it in :
+> `REAL_WIDTH_CM = 30`
+> `REAL_HEIGHT_CM = 52.4`
 >
 >The outer marker corners must match this real-world size.
 >
@@ -63,3 +66,10 @@ cd Leaf_Sice
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+
+
+## New Debugs 
+
+- Debug Windows to control
+- Markers will remove for Mesurement
+- Reflektions will ignore with HSV Saturation
