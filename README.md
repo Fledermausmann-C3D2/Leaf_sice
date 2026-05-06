@@ -55,6 +55,8 @@ for not long leafs...
 - GUI (ttkbootstrap)
 
 
+![Example](images/Sample.png)
+
 >[!NOTE]
 >This Programm is tested on Linux
 
