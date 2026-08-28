@@ -154,6 +154,7 @@ def run_analysis():
 
         # target coordinate system
         scale = 20 # scaling factor for area calculation 10 - 30
+        pixel_per_cm = scale
         dst = np.array([
             [0,0],
             [REAL_WIDTH_CM*scale,0],
@@ -163,22 +164,44 @@ def run_analysis():
 
         M = cv2.getPerspectiveTransform(rect, dst)
         warped = cv2.warpPerspective(img, M, (int(REAL_WIDTH_CM*scale), int(REAL_HEIGHT_CM*scale)))
-
-      # ================= LEAF =================
+    
         hsv = cv2.cvtColor(warped, cv2.COLOR_BGR2HSV)
-        lower_green = np.array([0, 0, 200])
-        upper_green = np.array([180, 30, 255])
+        debug_meas = warped.copy() 
+        leaf_number = 0
 
-        mask_color = cv2.inRange(hsv, lower_green, upper_green)
+      # ================= LEAF COLOR SEGMENTATION =================
+        # Farbbereiche für die drei Grüntöne
+        lower_light_green = np.array([30, 0, 200])
+        upper_light_green = np.array([90, 30, 255])
+        lower_medium_green = np.array([25, 30, 100])
+        upper_medium_green = np.array([70, 100, 255])
+        lower_dark_green = np.array([0, 100, 50])
+        upper_dark_green = np.array([20, 255, 200])
+
+        # Masken erstellen
+        mask_light = cv2.inRange(hsv, lower_light_green, upper_light_green)
+        mask_medium = cv2.inRange(hsv, lower_medium_green, upper_medium_green)
+        mask_dark = cv2.inRange(hsv, lower_dark_green, upper_dark_green)
         mask_sat = (hsv[:,:,1] > 30).astype(np.uint8) * 255
-        mask = cv2.bitwise_and(mask_color, mask_sat)
 
+        # Masken mit Sättigung kombinieren
+        mask_light = cv2.bitwise_and(mask_light, mask_sat)
+        mask_medium = cv2.bitwise_and(mask_medium, mask_sat)
+        mask_dark = cv2.bitwise_and(mask_dark, mask_sat)
+
+        # Morphologische Operationen
         kernel = np.ones((7,3), np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-        mask = cv2.dilate(mask, np.ones((1,1), np.uint8), iterations=1)
+        mask_light = cv2.morphologyEx(mask_light, cv2.MORPH_CLOSE, kernel)
+        mask_medium = cv2.morphologyEx(mask_medium, cv2.MORPH_CLOSE, kernel)
+        mask_dark = cv2.morphologyEx(mask_dark, cv2.MORPH_CLOSE, kernel)
 
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        big_contours = [c for c in contours if cv2.contourArea(c) > 500]  # Mindestgröße anpassen falls nötig
+        # Gesamtmaske
+        mask_total = cv2.bitwise_or(mask_light, mask_medium)
+        mask_total = cv2.bitwise_or(mask_total, mask_dark)
+
+        # Konturen finden
+        contours, _ = cv2.findContours(mask_total, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        big_contours = [c for c in contours if cv2.contourArea(c) > 500]
 
         if not big_contours:
             msg = f"{file}: ❌ NO Leaf"
@@ -189,51 +212,105 @@ def run_analysis():
             root.update_idletasks()
             continue
 
-        pixel_per_cm = scale
-
-        # ================= DEBUG: MEASUREMENTS (für ALLE Blätter) =================
-        debug_meas = warped.copy()
-        leaf_number = 0  # Zähler für Blätter pro Bild
-
+        # Flächen pro Blatt und Farbton berechnen + Debug-Ausgabe
         for leaf in big_contours:
             leaf_number += 1
-            hull = cv2.convexHull(leaf)
-            area_px = cv2.contourArea(hull)
-            area_cm2 = area_px / (pixel_per_cm**2)
 
+            
+            hull = cv2.convexHull(leaf)
+            area_px_total = cv2.contourArea(hull)
+            area_cm2_total = area_px_total / (pixel_per_cm**2)
+
+            # Maske für das aktuelle Blatt
+            leaf_mask = np.zeros_like(mask_total)
+            cv2.drawContours(leaf_mask, [hull], -1, 255, -1)
+
+            # Masken für Farbtöne auf Blatt begrenzen
+            leaf_mask_light = cv2.bitwise_and(mask_light, leaf_mask)
+            leaf_mask_medium = cv2.bitwise_and(mask_medium, leaf_mask)
+            leaf_mask_dark = cv2.bitwise_and(mask_dark, leaf_mask)
+
+            # Pixel pro Farbton zählen
+            area_px_light = cv2.countNonZero(leaf_mask_light)
+            area_px_medium = cv2.countNonZero(leaf_mask_medium)
+            area_px_dark = cv2.countNonZero(leaf_mask_dark)
+
+            # Flächen in cm²
+            area_cm2_light = area_px_light / (pixel_per_cm**2)
+            area_cm2_medium = area_px_medium / (pixel_per_cm**2)
+            area_cm2_dark = area_px_dark / (pixel_per_cm**2)
+
+            # Prozent berechnen
+            percent_light = (area_cm2_light / area_cm2_total) * 100 if area_cm2_total > 0 else 0
+            percent_medium = (area_cm2_medium / area_cm2_total) * 100 if area_cm2_total > 0 else 0
+            percent_dark = (area_cm2_dark / area_cm2_total) * 100 if area_cm2_total > 0 else 0
+
+            # Debug: Blattkontur und Bounding Box zeichnen
+            cv2.drawContours(debug_meas, [leaf], -1, (0, 255, 0), 2)
             rect = cv2.minAreaRect(leaf)
             (w, h) = rect[1]
             angle = rect[2]
-
-            # Normalisierung (Länge = längere Seite)
             if w < h:
                 angle += 90
             length_cm = max(w, h) / pixel_per_cm
             width_cm = min(w, h) / pixel_per_cm
 
-            # Debug: Blattkontur und Bounding Box zeichnen
-            cv2.drawContours(debug_meas, [leaf], -1, (0, 255, 0), 2)
+# Print-Anweisung für die Konsole
+            print(f"{file} | Leaf {leaf_number}: L={length_cm:.2f}cm, W={width_cm:.2f}cm, Area={area_cm2_total:.2f}cm², Angle={angle:.1f}°")
+            print(f"  Light: {area_cm2_light:.2f}cm² ({percent_light:.1f}%), Medium: {area_cm2_medium:.2f}cm² ({percent_medium:.1f}%), Dark: {area_cm2_dark:.2f}cm² ({percent_dark:.1f}%)")
+
+
+
             box = cv2.boxPoints(rect)
             box = np.int32(box)
             cv2.drawContours(debug_meas, [box], 0, (0, 0, 255), 2)
-            cv2.putText(debug_meas, f"Leaf {leaf_number}: L={length_cm:.1f}cm, W={width_cm:.1f}cm",
-                        (box[0][0], box[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
+            cv2.putText(debug_meas, f"Leaf {leaf_number}: L={length_cm:.1f}cm, W={width_cm:.1f}cm, Total={area_cm2_total:.1f}cm²",
+                        (box[0][0], box[0][1] - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+            cv2.putText(debug_meas, f"Light: {area_cm2_light:.1f}cm² ({percent_light:.1f}%)",
+                        (box[0][0], box[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (100, 255, 100), 2)
+            cv2.putText(debug_meas, f"Medium: {area_cm2_medium:.1f}cm² ({percent_medium:.1f}%)",
+                        (box[0][0], box[0][1] + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 200, 0), 2)
+            cv2.putText(debug_meas, f"Dark: {area_cm2_dark:.1f}cm² ({percent_dark:.1f}%)",
+                        (box[0][0], box[0][1] + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 100, 200), 2)
 
-            print(f"{file} | Leaf {leaf_number}: L={length_cm:.2f}cm, W={width_cm:.2f}cm, Area={area_cm2:.2f}cm², Angle={angle:.1f}°")
-            results.append([file, leaf_number, length_cm, width_cm, area_cm2, angle])
+            # Ergebnisse speichern (kombiniert)
+            results.append([
+                file, leaf_number, length_cm, width_cm, area_cm2_total,
+                area_cm2_light, percent_light,
+                area_cm2_medium, percent_medium,
+                area_cm2_dark, percent_dark, angle
+            ])
 
         # Debug-Fenster anzeigen (skaliert)
         h_dbg, w_dbg = debug_meas.shape[:2]
         scale_dbg = min(800/w_dbg, 600/h_dbg)
         debug_resized = cv2.resize(debug_meas, (int(w_dbg*scale_dbg), int(h_dbg*scale_dbg)))
         cv2.imshow("DEBUG - All Leaves", debug_resized)
-        cv2.waitKey(0)
+        #cv2.imshow("Light Green", mask_light)
+        #cv2.imshow("Medium Green", mask_medium)
+        #cv2.imshow("Dark Green", mask_dark)
+
+        # 10 Sekunden warten oder auf Tastendruck
+        start_time = cv2.getTickCount()
+        while True:
+            key = cv2.waitKey(100) & 0xFF
+            if key != 255:  # Taste gedrückt
+                break
+            current_time = cv2.getTickCount()
+            elapsed_time = (current_time - start_time) / cv2.getTickFrequency()
+            if elapsed_time >= 10:  # 10 Sekunden vergangen
+                break
         cv2.destroyAllWindows()
 
     # save CSV ==============================
-    with open(output_csv,"w",newline="") as f:
+    with open(output_csv, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["image", "leaf_number", "length_cm", "width_cm", "area_cm2", "angle_deg"])
+        writer.writerow([
+            "image", "leaf_number", "length_cm", "width_cm", "area_total_cm2", "angle_deg",
+            "area_light_cm2", "percent_light",
+            "area_medium_cm2", "percent_medium",
+            "area_dark_cm2", "percent_dark"
+        ])
         writer.writerows(results)
 
     # ================= SAVE LOG =================
