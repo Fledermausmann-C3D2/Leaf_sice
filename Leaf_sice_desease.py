@@ -169,35 +169,77 @@ def run_analysis():
         debug_meas = warped.copy() 
         leaf_number = 0
 
+
       # ================= LEAF COLOR SEGMENTATION =================
-        # Farbbereiche für die drei Grüntöne
-        lower_light_green = np.array([30, 0, 200])
-        upper_light_green = np.array([90, 30, 255])
-        lower_medium_green = np.array([25, 30, 100])
-        upper_medium_green = np.array([70, 100, 255])
-        lower_dark_green = np.array([0, 100, 50])
-        upper_dark_green = np.array([20, 255, 200])
+
+        # Sättigungsmaske
+        mask_sat = (hsv[:,:,1] > 30).astype(np.uint8) * 255
+
+
+        # ================= ALLES GRÜN =================
+        # Dieser Bereich ist die Basis = 100 %
+
+        lower_green = np.array([25, 30, 50])
+        upper_green = np.array([90, 255, 255])
+
+        mask_green = cv2.inRange(hsv, lower_green, upper_green)
+
+        # Sättigung berücksichtigen
+        mask_green = cv2.bitwise_and(mask_green, mask_sat)
+
+
+        # ================= UNTERBEREICHE =================
+
+        # HELLGRÜN
+        lower_light_green = np.array([25, 30, 180])
+        upper_light_green = np.array([90, 255, 255])
+
+        # MITTELGRÜN
+        lower_medium_green = np.array([25, 50, 100])
+        upper_medium_green = np.array([90, 255, 180])
+
+        # DUNKELGRÜN
+        lower_dark_green = np.array([25, 50, 50])
+        upper_dark_green = np.array([90, 255, 100])
+
 
         # Masken erstellen
         mask_light = cv2.inRange(hsv, lower_light_green, upper_light_green)
         mask_medium = cv2.inRange(hsv, lower_medium_green, upper_medium_green)
         mask_dark = cv2.inRange(hsv, lower_dark_green, upper_dark_green)
-        mask_sat = (hsv[:,:,1] > 30).astype(np.uint8) * 255
 
-        # Masken mit Sättigung kombinieren
-        mask_light = cv2.bitwise_and(mask_light, mask_sat)
-        mask_medium = cv2.bitwise_and(mask_medium, mask_sat)
-        mask_dark = cv2.bitwise_and(mask_dark, mask_sat)
+
+        # Nur Pixel behalten, die auch in "ALLES GRÜN" liegen
+        mask_light = cv2.bitwise_and(mask_light, mask_green)
+        mask_medium = cv2.bitwise_and(mask_medium, mask_green)
+        mask_dark = cv2.bitwise_and(mask_dark, mask_green)
+
 
         # Morphologische Operationen
         kernel = np.ones((7,3), np.uint8)
-        mask_light = cv2.morphologyEx(mask_light, cv2.MORPH_CLOSE, kernel)
-        mask_medium = cv2.morphologyEx(mask_medium, cv2.MORPH_CLOSE, kernel)
-        mask_dark = cv2.morphologyEx(mask_dark, cv2.MORPH_CLOSE, kernel)
 
-        # Gesamtmaske
-        mask_total = cv2.bitwise_or(mask_light, mask_medium)
-        mask_total = cv2.bitwise_or(mask_total, mask_dark)
+        mask_green = cv2.morphologyEx(
+            mask_green, cv2.MORPH_CLOSE, kernel
+        )
+
+        mask_light = cv2.morphologyEx(
+            mask_light, cv2.MORPH_CLOSE, kernel
+        )
+
+        mask_medium = cv2.morphologyEx(
+            mask_medium, cv2.MORPH_CLOSE, kernel
+        )
+
+        mask_dark = cv2.morphologyEx(
+            mask_dark, cv2.MORPH_CLOSE, kernel
+        )
+
+
+        # ================= GESAMTBLATT =================
+        # Für die Blatterkennung wird ALLES GRÜN verwendet
+
+        mask_total = mask_green
+
 
         # Konturen finden
         contours, _ = cv2.findContours(mask_total, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -240,10 +282,27 @@ def run_analysis():
             area_cm2_medium = area_px_medium / (pixel_per_cm**2)
             area_cm2_dark = area_px_dark / (pixel_per_cm**2)
 
-            # Prozent berechnen
-            percent_light = (area_cm2_light / area_cm2_total) * 100 if area_cm2_total > 0 else 0
-            percent_medium = (area_cm2_medium / area_cm2_total) * 100 if area_cm2_total > 0 else 0
-            percent_dark = (area_cm2_dark / area_cm2_total) * 100 if area_cm2_total > 0 else 0
+            # ================= PROZENTUALE FARBVERTEILUNG =================
+            # Alle erkannten Grüntöne zusammen = 100 %
+
+            area_px_green = cv2.countNonZero(
+                cv2.bitwise_and(mask_green, leaf_mask)
+            )
+
+
+            if area_px_green > 0:
+                percent_light = (area_px_light / area_px_green) * 100
+                percent_medium = (area_px_medium / area_px_green) * 100
+                percent_dark = (area_px_dark / area_px_green) * 100
+            else:
+                percent_light = 0
+                percent_medium = 0
+                percent_dark = 0
+
+            # Gesamte erkannte Grünfläche in cm²
+            area_cm2_green = area_px_green / (pixel_per_cm**2)
+
+
 
             # Debug: Blattkontur und Bounding Box zeichnen
             cv2.drawContours(debug_meas, [leaf], -1, (0, 255, 0), 2)
@@ -275,11 +334,21 @@ def run_analysis():
 
             # Ergebnisse speichern (kombiniert)
             results.append([
-                file, leaf_number, length_cm, width_cm, area_cm2_total,
-                area_cm2_light, percent_light,
-                area_cm2_medium, percent_medium,
-                area_cm2_dark, percent_dark, angle
+                file,
+                leaf_number,
+                length_cm,
+                width_cm,
+                area_cm2_total,
+                area_cm2_green,
+                area_cm2_light,
+                percent_light,
+                area_cm2_medium,
+                percent_medium,
+                area_cm2_dark,
+                percent_dark,
+                angle
             ])
+
 
         # Debug-Fenster anzeigen (skaliert)
         h_dbg, w_dbg = debug_meas.shape[:2]
@@ -298,7 +367,7 @@ def run_analysis():
                 break
             current_time = cv2.getTickCount()
             elapsed_time = (current_time - start_time) / cv2.getTickFrequency()
-            if elapsed_time >= 10:  # 10 Sekunden vergangen
+            if elapsed_time >= 1:  # 10 Sekunden vergangen
                 break
         cv2.destroyAllWindows()
 
@@ -306,11 +375,21 @@ def run_analysis():
     with open(output_csv, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
-            "image", "leaf_number", "length_cm", "width_cm", "area_total_cm2", "angle_deg",
-            "area_light_cm2", "percent_light",
-            "area_medium_cm2", "percent_medium",
-            "area_dark_cm2", "percent_dark"
+            "image",
+            "leaf_number",
+            "length_cm",
+            "width_cm",
+            "area_total_cm2",
+            "area_green_cm2",
+            "area_light_cm2",
+            "percent_light",
+            "area_medium_cm2",
+            "percent_medium",
+            "area_dark_cm2",
+            "percent_dark",
+            "angle_deg"
         ])
+
         writer.writerows(results)
 
     # ================= SAVE LOG =================
