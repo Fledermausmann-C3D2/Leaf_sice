@@ -450,7 +450,7 @@ def run_analysis():
 root = ttk.Window(themename="solar")
 
 root.title("Twinkels Leaf")
-root.geometry("900x1350")
+root.geometry("1100x800")
 
 folder_var = ttk.StringVar()
 output_var = ttk.StringVar()
@@ -516,32 +516,39 @@ For go next in the Analyzes press any Button!!
 Created by Fledermausmann - C3D2
 """
 
-ttk.Label(root,text="Leaf Sice Analyse (ArUco)",font=("Arial",12,"bold")).pack(pady=5)
+# Layout: zwei Spalten - links Beschreibung, rechts Funktionalitaet
+col_left = ttk.Frame(root)
+col_left.pack(side="left", fill="both", expand=True, padx=10, pady=5)
+col_right = ttk.Frame(root)
+col_right.pack(side="left", fill="both", expand=True, padx=10, pady=5)
 
-ttk.Label(root,text=description,justify="left",wraplength=700).pack(pady=5)
+# ---------- Linke Spalte: Titel + Beschreibung ----------
+ttk.Label(col_left, text="Leaf Sice Analyse (ArUco)", font=("Arial", 12, "bold")).pack(pady=5)
+ttk.Label(col_left, text=description, justify="left", wraplength=500).pack(pady=5)
 
-ttk.Entry(root,textvariable=folder_var,width=50).pack()
+# ---------- Rechte Spalte: alle funktionalen Elemente ----------
+ttk.Label(col_right, text="Picture-Folder", font=("Arial", 10, "bold")).pack(pady=(5, 0))
+ttk.Entry(col_right, textvariable=folder_var, width=50).pack(pady=2)
+ttk.Button(col_right, text="choose Picture-Folder", command=choose_folder).pack(pady=5)
 
-ttk.Button(root,text="choose Picture-Folder",command=choose_folder).pack(pady=5)
+ttk.Label(col_right, text="CSV output", font=("Arial", 10, "bold")).pack(pady=(10, 0))
+ttk.Entry(col_right, textvariable=output_var, width=50).pack(pady=2)
+ttk.Button(col_right, text="CSV choose", command=choose_output).pack(pady=5)
 
-ttk.Entry(root,textvariable=output_var,width=50).pack()
-
-ttk.Button(root,text="CSV choose",command=choose_output).pack(pady=5)
-
-ttk.Label(root,text="Marker distance (cm):",
-          font=("Arial",10,"bold")).pack(pady=(10,0))
-marker_frame = ttk.Frame(root)
+ttk.Label(col_right, text="Marker distance (cm):",
+          font=("Arial", 10, "bold")).pack(pady=(10, 0))
+marker_frame = ttk.Frame(col_right)
 marker_frame.pack(pady=2)
 ttk.Label(marker_frame, text="width:", width=8).pack(side="left")
 ttk.Entry(marker_frame, textvariable=marker_width_var, width=8).pack(side="left", padx=2)
 ttk.Label(marker_frame, text="height:", width=8).pack(side="left")
 ttk.Entry(marker_frame, textvariable=marker_height_var, width=8).pack(side="left", padx=2)
 
-ttk.Label(root,text="HSV settings  (lower H,S,V  /  upper H,S,V):",
-          font=("Arial",10,"bold")).pack(pady=(10,0))
+ttk.Label(col_right, text="HSV settings  (lower H,S,V  /  upper H,S,V):",
+          font=("Arial", 10, "bold")).pack(pady=(10, 0))
 
 def build_hsv_row(name, label, highlight=False):
-    frame = ttk.Frame(root)
+    frame = ttk.Frame(col_right)
     frame.pack(pady=2)
     label_font = ("Arial", 10, "bold") if highlight else ("Arial", 10)
     ttk.Label(frame, text=label, width=8, font=label_font,
@@ -558,13 +565,13 @@ build_hsv_row("hell",   "light")
 build_hsv_row("mittel", "medium")
 build_hsv_row("dunkel", "dark")
 
-ttk.Button(root,text="HSV color test",command=open_hsv_tester).pack(pady=5)
+ttk.Button(col_right, text="HSV color test", command=open_hsv_tester).pack(pady=5)
 
-ttk.Button(root,text="Start",command=start_analysis).pack(pady=10)
+ttk.Button(col_right, text="Start", command=start_analysis).pack(pady=10)
 
-progress = ttk.Progressbar(root,length=300)
+progress = ttk.Progressbar(col_right, length=300)
 progress.pack(pady=5)
 
-ttk.Label(root,textvariable=status_var).pack()
+ttk.Label(col_right, textvariable=status_var).pack()
 
 root.mainloop()
