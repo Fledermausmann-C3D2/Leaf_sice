@@ -7,6 +7,8 @@ import threading
 import ttkbootstrap as ttk
 from tkinter import filedialog
 
+import hsv_tester
+
 
 #============== Sorting images =====================
 def natural_key(text):
@@ -37,6 +39,37 @@ def choose_output():
 def start_analysis():
     thread = threading.Thread(target=run_analysis)
     thread.start()
+
+# ================= HSV Tester oeffnen =================
+def open_hsv_tester():
+    """Oeffnet den Dateidialog und startet den HSV-Tester in einem Thread."""
+    image_path = filedialog.askopenfilename(
+        title="Choose an image for HSV testing",
+        filetypes=[
+            ("JPEG", "*.jpg *.JPG *.jpeg *.JPEG"),
+            ("PNG", "*.png *.PNG"),
+            ("All files", "*.*"),
+        ]
+    )
+    if not image_path:
+        return
+    thread = threading.Thread(target=hsv_tester.main, args=(image_path,))
+    thread.start()
+    status_var.set("HSV Tester started")
+
+# ================= HSV aus GUI lesen =================
+def get_hsv(name):
+    """Liest die HSV-Grenzen fuer eine Farbvariante aus den GUI-Eingaben."""
+    lower = [int(v.get()) for v in hsv_vars[name]["lower"]]
+    upper = [int(v.get()) for v in hsv_vars[name]["upper"]]
+    return np.array(lower), np.array(upper)
+
+def clamp_to_main(lower_sub, upper_sub, lower_main, upper_main):
+    """Begrenzt die HSV-Werte eines Unterbereichs so, dass sie
+    automatisch innerhalb des main-Bereichs liegen."""
+    lower_sub = np.maximum(lower_sub, lower_main)
+    upper_sub = np.minimum(upper_sub, upper_main)
+    return lower_sub, upper_sub
 
 # ================= CORE =================
 
@@ -155,15 +188,23 @@ def run_analysis():
         # target coordinate system
         scale = 20 # scaling factor for area calculation 10 - 30
         pixel_per_cm = scale
+        try:
+            real_w = float(marker_width_var.get())
+        except ValueError:
+            real_w = REAL_WIDTH_CM
+        try:
+            real_h = float(marker_height_var.get())
+        except ValueError:
+            real_h = REAL_HEIGHT_CM
         dst = np.array([
             [0,0],
-            [REAL_WIDTH_CM*scale,0],
-            [REAL_WIDTH_CM*scale,REAL_HEIGHT_CM*scale],
-            [0,REAL_HEIGHT_CM*scale]
+            [real_w*scale,0],
+            [real_w*scale,real_h*scale],
+            [0,real_h*scale]
         ], dtype="float32")
 
         M = cv2.getPerspectiveTransform(rect, dst)
-        warped = cv2.warpPerspective(img, M, (int(REAL_WIDTH_CM*scale), int(REAL_HEIGHT_CM*scale)))
+        warped = cv2.warpPerspective(img, M, (int(real_w*scale), int(real_h*scale)))
     
         hsv = cv2.cvtColor(warped, cv2.COLOR_BGR2HSV)
         debug_meas = warped.copy() 
@@ -179,8 +220,7 @@ def run_analysis():
         # ================= ALLES GRÜN =================
         # Dieser Bereich ist die Basis = 100 %
 
-        lower_green = np.array([25, 30, 50])
-        upper_green = np.array([90, 255, 255])
+        lower_green, upper_green = get_hsv("main")
 
         mask_green = cv2.inRange(hsv, lower_green, upper_green)
 
@@ -189,18 +229,24 @@ def run_analysis():
 
 
         # ================= UNTERBEREICHE =================
+        # Die Grenzen von light / medium / dark werden automatisch
+        # auf den main-Bereich begrenzt, sodass sie immer innerhalb
+        # von main liegen.
 
         # HELLGRÜN
-        lower_light_green = np.array([25, 30, 180])
-        upper_light_green = np.array([90, 255, 255])
+        lower_light_green, upper_light_green = get_hsv("hell")
+        lower_light_green, upper_light_green = clamp_to_main(
+            lower_light_green, upper_light_green, lower_green, upper_green)
 
         # MITTELGRÜN
-        lower_medium_green = np.array([25, 50, 100])
-        upper_medium_green = np.array([90, 255, 180])
+        lower_medium_green, upper_medium_green = get_hsv("mittel")
+        lower_medium_green, upper_medium_green = clamp_to_main(
+            lower_medium_green, upper_medium_green, lower_green, upper_green)
 
         # DUNKELGRÜN
-        lower_dark_green = np.array([25, 50, 50])
-        upper_dark_green = np.array([90, 255, 100])
+        lower_dark_green, upper_dark_green = get_hsv("dunkel")
+        lower_dark_green, upper_dark_green = clamp_to_main(
+            lower_dark_green, upper_dark_green, lower_green, upper_green)
 
 
         # Masken erstellen
@@ -236,7 +282,7 @@ def run_analysis():
 
 
         # ================= GESAMTBLATT =================
-        # Für die Blatterkennung wird ALLES GRÜN verwendet
+        # Für die Blatterkennung wird ALLES GRÜN verwendet.
 
         mask_total = mask_green
 
@@ -409,20 +455,60 @@ root.geometry("900x1350")
 folder_var = ttk.StringVar()
 output_var = ttk.StringVar()
 status_var = ttk.StringVar()
+marker_width_var = ttk.StringVar(value=str(REAL_WIDTH_CM))
+marker_height_var = ttk.StringVar(value=str(REAL_HEIGHT_CM))
+
+# ================= HSV-Variablen (alle 4 Varianten editierbar) =================
+hsv_defaults = {
+    "main":   {"lower": [25, 30, 50],  "upper": [90, 255, 255]},
+    "hell":   {"lower": [25, 30, 180], "upper": [90, 255, 255]},
+    "mittel": {"lower": [25, 50, 100], "upper": [90, 255, 180]},
+    "dunkel": {"lower": [25, 50, 50],  "upper": [90, 255, 100]},
+}
+
+hsv_vars = {}
+for _name, _bounds in hsv_defaults.items():
+    hsv_vars[_name] = {}
+    for _bound in ("lower", "upper"):
+        hsv_vars[_name][_bound] = [
+            ttk.StringVar(value=str(_bounds[_bound][0])),
+            ttk.StringVar(value=str(_bounds[_bound][1])),
+            ttk.StringVar(value=str(_bounds[_bound][2])),
+        ]
 
 # Description text
 description = """
-Leaf measurement using ArUco markers and OpenCV!
+Leaf disease detection using ArUco markers and OpenCV!
 
-A white background with 4 ArUco markers is required for the measurement!
-The markers must be positioned exactly 60 x 30 cm apart at their outermost corners.
+This programme identifies infected leaves and quantifies the dark and light
+areas on each leaf as a percentage, using adjustable HSV colour thresholds.
 
-This programme measures the length of leaves (narrow ones) and their width.
-It calculates the leaf area based on the green colour.
-An angle is displayed in the CSV file; this indicates the quality of the image.
-It is recommended to scan the leaf as vertically as possible; other green 
-objects should be covered.
-The results are then saved in a CSV file.
+A white background with 4 ArUco markers is required for the measurement.
+The markers must be positioned exactly 60 x 30 cm apart at their outermost
+corners. The programme uses them to correct the perspective and to determine
+the real size of each leaf in centimetres.
+
+The HSV settings define four colour ranges:
+ - main   = the main green range. This defines the total leaf area (100%).
+            Only pixels within this range are considered part of the leaf.
+ - light  = light spots within the leaf. The programme counts how many of
+            the main pixels fall into this lighter range and reports it as
+            a percentage of the total leaf area.
+ - medium = medium-coloured spots within the leaf, reported as a percentage.
+ - dark   = dark spots within the leaf, reported as a percentage.
+
+The light, medium and dark ranges are automatically clamped so that they
+always lie within the main range. You only need to adjust main to capture the
+whole leaf; the three sub-ranges can then be fine-tuned to pick out the light,
+medium and dark regions you want to quantify.
+
+For each leaf the following values are saved in a CSV file:
+ image, leaf number, length (cm), width (cm), total area (cm2),
+ green area (cm2), light area + percent, medium area + percent,
+ dark area + percent, and an angle describing the image quality.
+
+It is recommended to scan the leaf as flat and vertically as possible and
+to cover any other green objects in the frame.
 
 For go next in the Analyzes press any Button!!
 
@@ -441,6 +527,38 @@ ttk.Button(root,text="choose Picture-Folder",command=choose_folder).pack(pady=5)
 ttk.Entry(root,textvariable=output_var,width=50).pack()
 
 ttk.Button(root,text="CSV choose",command=choose_output).pack(pady=5)
+
+ttk.Label(root,text="Marker distance (cm):",
+          font=("Arial",10,"bold")).pack(pady=(10,0))
+marker_frame = ttk.Frame(root)
+marker_frame.pack(pady=2)
+ttk.Label(marker_frame, text="width:", width=8).pack(side="left")
+ttk.Entry(marker_frame, textvariable=marker_width_var, width=8).pack(side="left", padx=2)
+ttk.Label(marker_frame, text="height:", width=8).pack(side="left")
+ttk.Entry(marker_frame, textvariable=marker_height_var, width=8).pack(side="left", padx=2)
+
+ttk.Label(root,text="HSV settings  (lower H,S,V  /  upper H,S,V):",
+          font=("Arial",10,"bold")).pack(pady=(10,0))
+
+def build_hsv_row(name, label, highlight=False):
+    frame = ttk.Frame(root)
+    frame.pack(pady=2)
+    label_font = ("Arial", 10, "bold") if highlight else ("Arial", 10)
+    ttk.Label(frame, text=label, width=8, font=label_font,
+              bootstyle="primary" if highlight else "default").pack(side="left")
+    ttk.Label(frame, text="lower:", width=6).pack(side="left")
+    for v in hsv_vars[name]["lower"]:
+        ttk.Entry(frame, textvariable=v, width=4).pack(side="left", padx=1)
+    ttk.Label(frame, text="upper:", width=6).pack(side="left")
+    for v in hsv_vars[name]["upper"]:
+        ttk.Entry(frame, textvariable=v, width=4).pack(side="left", padx=1)
+
+build_hsv_row("main",   "main",   highlight=True)
+build_hsv_row("hell",   "light")
+build_hsv_row("mittel", "medium")
+build_hsv_row("dunkel", "dark")
+
+ttk.Button(root,text="HSV color test",command=open_hsv_tester).pack(pady=5)
 
 ttk.Button(root,text="Start",command=start_analysis).pack(pady=10)
 
