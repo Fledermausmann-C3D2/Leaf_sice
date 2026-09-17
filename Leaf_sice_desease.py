@@ -405,15 +405,14 @@ def run_analysis():
         #cv2.imshow("Medium Green", mask_medium)
         #cv2.imshow("Dark Green", mask_dark)
 
-        # 10 Sekunden warten oder auf Tastendruck
+        # 3 Sekunden anzeigen oder auf Tastendruck fortsetzen
         start_time = cv2.getTickCount()
         while True:
-            key = cv2.waitKey(100) & 0xFF
-            if key != 255:  # Taste gedrückt
+            key = cv2.waitKeyEx(50)
+            if key != -1:  # Taste gedrückt
                 break
-            current_time = cv2.getTickCount()
-            elapsed_time = (current_time - start_time) / cv2.getTickFrequency()
-            if elapsed_time >= 1:  # 10 Sekunden vergangen
+            elapsed_time = (cv2.getTickCount() - start_time) / cv2.getTickFrequency()
+            if elapsed_time >= 3:
                 break
         cv2.destroyAllWindows()
 
