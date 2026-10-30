@@ -31,7 +31,7 @@ This program automatically measures leaves in images:
 
 You can choose a complete folder with pictures. All images including subfolders are processed in natural sort order!
 
-Example
+![Example](images/sample2.png)
 
 ## Variants
 
@@ -129,7 +129,7 @@ healthy / whitish fungus / blackish infection  =  62.1 % / 21.4 % / 16.5 %
 
 Before analysing a whole folder, the thresholds can be fine tuned with the integrated **HSV color test**. Select a single test image and the HSV tester opens to explore suitable color ranges interactively.
 
-Example
+![Example](images/sample2.png)
 
 ### 6. Debug mode and error logging
 
